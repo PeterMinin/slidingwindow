@@ -8,6 +8,15 @@ class DimOrder(object):
 	HeightWidthChannel = ['h', 'w', 'c']
 
 
+class IterOrder(object):
+	"""
+	Represents the order of iterating over the dataset's dimensions.
+	Dimensions are listed from the innermost, i.e. the one changing fastest, to the outermost.
+	"""
+	TransformHeightWidth = ['t', 'y', 'x']
+	TransformWidthHeight = ['t', 'x', 'y']
+
+
 class SlidingWindow(object):
 	"""
 	Represents a single window into a larger dataset.
@@ -84,7 +93,7 @@ class SlidingWindow(object):
 		return self.__str__()
 
 
-def generate(data, dimOrder, maxWindowSize, overlapPercent, transforms=[], overrideWidth=None, overrideHeight=None):
+def generate(data, dimOrder, maxWindowSize, overlapPercent, transforms=[], overrideWidth=None, overrideHeight=None, iterorder=IterOrder.TransformHeightWidth):
 	"""
 	Generates a set of sliding windows for the specified dataset.
 	"""
@@ -94,10 +103,25 @@ def generate(data, dimOrder, maxWindowSize, overlapPercent, transforms=[], overr
 	height = data.shape[dimOrder.index('h')]
 	
 	# Generate the windows
-	return generateForSize(width, height, dimOrder, maxWindowSize, overlapPercent, transforms, overrideWidth, overrideHeight)
+	return generateForSize(width, height, dimOrder, maxWindowSize, overlapPercent, transforms, overrideWidth, overrideHeight, iterorder)
 
 
-def generateForSize(width, height, dimOrder, maxWindowSize, overlapPercent, transforms=[], overrideWidth=None, overrideHeight=None):
+def iterate_dims(xVals, yVals, tVals, iterorder):
+	if iterorder == IterOrder.TransformHeightWidth:
+		for x in xVals:
+			for y in yVals:
+				for t in tVals:
+					yield x, y, t
+	elif iterorder == IterOrder.TransformWidthHeight:
+		for y in yVals:
+			for x in xVals:
+				for t in tVals:
+					yield x, y, t
+	else:
+		raise Error('Unsupported iteration order: ' + str(iterorder))
+
+
+def generateForSize(width, height, dimOrder, maxWindowSize, overlapPercent, transforms=[], overrideWidth=None, overrideHeight=None, iterorder=IterOrder.TransformWidthHeight):
 	"""
 	Generates a set of sliding windows for a dataset with the specified dimensions and order.
 	"""
@@ -132,22 +156,20 @@ def generateForSize(width, height, dimOrder, maxWindowSize, overlapPercent, tran
 	
 	# Generate the list of windows
 	windows = []
-	for xOffset in xOffsets:
-		for yOffset in yOffsets:
-			for transform in [None] + transforms:
-				windows.append(SlidingWindow(
-					x=xOffset,
-					y=yOffset,
-					w=windowSizeX,
-					h=windowSizeY,
-					dimOrder=dimOrder,
-					transform=transform
-				))
+	for xOffset, yOffset, transform in iterate_dims(xOffsets, yOffsets, [None] + transforms, iterorder):
+		windows.append(SlidingWindow(
+			x=xOffset,
+			y=yOffset,
+			w=windowSizeX,
+			h=windowSizeY,
+			dimOrder=dimOrder,
+			transform=transform
+		))
 	
 	return windows
 
 
-def generateRectanglarWindows(data, dimOrder, windowShape, overlapPercent, transforms=[]):
+def generateRectanglarWindows(data, dimOrder, windowShape, overlapPercent, transforms=[], iterorder=IterOrder.TransformWidthHeight):
 	"""
 	Generates a set of sliding windows for the specified dataset, creating rectangular windows instead of square windows.
 	`windowShape` must be a tuple specifying the desired window dimensions in (height,width) form.
@@ -167,11 +189,12 @@ def generateRectanglarWindows(data, dimOrder, windowShape, overlapPercent, trans
 		overlapPercent,
 		transforms,
 		overrideWidth = windowWidth,
-		overrideHeight = windowHeight
+		overrideHeight = windowHeight,
+		iterorder=iterorder,
 	)
 
 
-def generateForNumberOfWindows(data, dimOrder, windowCount, overlapPercent, transforms=[]):
+def generateForNumberOfWindows(data, dimOrder, windowCount, overlapPercent, transforms=[], iterorder=IterOrder.TransformWidthHeight):
 	"""
 	Generates a set of sliding windows for the specified dataset, automatically determining the required window size in
 	order to create the specified number of windows. `windowCount` must be a tuple specifying the desired number of windows
@@ -196,5 +219,6 @@ def generateForNumberOfWindows(data, dimOrder, windowCount, overlapPercent, tran
 		overlapPercent,
 		transforms,
 		overrideWidth = windowSizeX,
-		overrideHeight = windowSizeY
+		overrideHeight = windowSizeY,
+		iterorder=iterorder,
 	)
